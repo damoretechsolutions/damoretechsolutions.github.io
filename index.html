@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tech Ecosystem Workflow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .stage-transition { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans min-h-screen">
+
+    <div class="max-w-6xl mx-auto p-4 md:p-8">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-black tracking-tight text-slate-900">SYSTEM OPS WORKFLOW</h1>
+                <p class="text-slate-500 font-medium">Active Session: <span id="ticket-id-display" class="text-slate-900 font-bold">TIC-8821</span></p>
+            </div>
+            <div class="flex gap-2 items-center bg-white p-3 rounded-full shadow-sm border border-slate-200">
+                <i class="fa-solid fa-clock text-slate-400"></i>
+                <span id="session-time" class="text-xs font-mono text-slate-500 uppercase tracking-wider"></span>
+            </div>
+        </header>
+
+        <!-- Progress Steps -->
+        <div class="grid grid-cols-3 md:grid-cols-6 gap-3 mb-8" id="stepper">
+            <!-- Steps injected by JS -->
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Main Content Area -->
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden min-h-[500px] flex flex-col">
+                <div id="stage-progress-bar" class="h-2 w-full bg-emerald-500 transition-all duration-500"></div>
+                <div class="p-6 md:p-10 flex-grow" id="stage-container">
+                    <!-- Stage Content injected by JS -->
+                </div>
+            </div>
+
+            <!-- Sidebar / Audit Trail -->
+            <div class="space-y-6">
+                <div class="bg-slate-900 text-white rounded-2xl p-6 shadow-xl flex flex-col h-[400px]">
+                    <h3 class="font-bold uppercase text-xs tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ul"></i> Audit Trail
+                    </h3>
+                    <div id="audit-trail" class="space-y-4 overflow-y-auto flex-grow pr-2 custom-scrollbar">
+                        <!-- Logs injected by JS -->
+                        <p class="text-slate-500 italic text-sm">Waiting for initial submission...</p>
+                    </div>
+                </div>
+
+                <!-- Ticket Summary Card -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm space-y-4">
+                    <h3 class="font-bold text-sm border-b pb-2">Ticket Live Data</h3>
+                    <div class="space-y-3 text-xs" id="summary-data">
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Asset ID:</span>
+                            <span id="sum-asset" class="font-bold">—</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Urgency:</span>
+                            <span id="sum-urgency" class="font-bold">—</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Category:</span>
+                            <span id="sum-category" class="font-bold">—</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500">Priority:</span>
+                            <span id="sum-priority" class="font-bold">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Interaction Scripts -->
+    <script>
+        const STAGES = [
+            { id: 1, name: 'Intake', icon: 'fa-clipboard-list', color: 'bg-emerald-500' },
+            { id: 2, name: 'Triage', icon: 'fa-magnifying-glass', color: 'bg-amber-500' },
+            { id: 3, name: 'L1 Diag', icon: 'fa-bolt', color: 'bg-blue-500' },
+            { id: 4, name: 'L2/3 Resolution', icon: 'fa-gears', color: 'bg-red-500' },
+            { id: 5, name: 'Validation', icon: 'fa-circle-check', color: 'bg-purple-500' },
+            { id: 6, name: 'Closure/RCA', icon: 'fa-box-archive', color: 'bg-slate-500' }
+        ];
+
+        let currentStage = 1;
+        let ticketData = {
+            id: `TIC-${Math.floor(1000 + Math.random() * 9000)}`,
+            description: '',
+            urgency: 'Medium',
+            assetId: '',
+            category: '',
+            priority: '',
+            logs: [],
+            resolution: ''
+        };
+
+        function updateTime() {
+            document.getElementById('session-time').innerText = new Date().toLocaleTimeString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        function addLog(message) {
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            ticketData.logs.unshift({ time, message });
+            renderLogs();
+        }
+
+        function renderLogs() {
+            const container = document.getElementById('audit-trail');
+            container.innerHTML = ticketData.logs.map(log => `
+                <div class="border-l-2 border-slate-700 pl-4 relative fade-in">
+                    <div class="absolute w-2 h-2 bg-slate-500 rounded-full -left-[5px] top-1"></div>
+                    <span class="text-[10px] text-slate-500 font-mono">${log.time}</span>
+                    <p class="text-sm font-medium text-slate-200">${log.message}</p>
+                </div>
+            `).join('');
+        }
+
+        function updateStepper() {
+            const stepper = document.getElementById('stepper');
+            stepper.innerHTML = STAGES.map(s => {
+                const isActive = currentStage === s.id;
+                const isCompleted = currentStage > s.id;
+                return `
+                    <div class="relative flex flex-col items-center p-3 rounded-xl border-2 transition-all duration-300 ${isActive ? 'border-slate-900 shadow-md ' + s.color + ' text-white' : isCompleted ? 'bg-slate-200 border-transparent text-slate-400' : 'bg-white border-transparent text-slate-300'}">
+                        <i class="fa-solid ${s.icon} text-lg mb-1"></i>
+                        <span class="text-[10px] uppercase font-black text-center leading-tight">${s.name}</span>
+                        ${isCompleted ? '<div class="absolute top-1 right-1 bg-white rounded-full"><i class="fa-solid fa-circle-check text-emerald-500 text-[12px]"></i></div>' : ''}
+                    </div>
+                `;
+            }).join('');
+
+            const bar = document.getElementById('stage-progress-bar');
+            bar.className = `h-2 w-full transition-all duration-500 ${STAGES[currentStage-1].color}`;
+            document.getElementById('ticket-id-display').innerText = ticketData.id;
+        }
+
+        function renderStage() {
+            const container = document.getElementById('stage-container');
+            let html = '';
+
+            const header = `
+                <div class="flex items-center gap-3 mb-8">
+                    <span class="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${STAGES[currentStage-1].color}">
+                        ${currentStage}
+                    </span>
+                    <h2 class="text-2xl font-bold uppercase tracking-tight">Stage ${currentStage}: ${STAGES[currentStage-1].name}</h2>
+                </div>
+            `;
+
+            switch(currentStage) {
+                case 1:
+                    html = `
+                        ${header}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 fade-in">
+                            <div class="space-y-2">
+                                <label class="block text-sm font-bold text-slate-700">Issue Description</label>
+                                <textarea id="in-desc" class="w-full p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none h-32" placeholder="What exactly is broken?">${ticketData.description}</textarea>
+                            </div>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-slate-700">Urgency Level</label>
+                                    <select id="in-urgency" class="mt-1 w-full p-3 border border-slate-200 rounded-xl">
+                                        <option ${ticketData.urgency === 'Low' ? 'selected' : ''}>Low</option>
+                                        <option ${ticketData.urgency === 'Medium' ? 'selected' : ''}>Medium</option>
+                                        <option ${ticketData.urgency === 'High' ? 'selected' : ''}>High</option>
+                                        <option ${ticketData.urgency === 'Critical' ? 'selected' : ''}>Critical</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-slate-700">Asset ID / Serial Number</label>
+                                    <input id="in-asset" type="text" class="mt-1 w-full p-3 border border-slate-200 rounded-xl" placeholder="e.g. LAP-102" value="${ticketData.assetId}">
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="submitIntake()" class="mt-8 w-full bg-emerald-600 text-white py-4 rounded-xl font-black text-lg hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200">START WORKFLOW</button>
+                    `;
+                    break;
+                case 2:
+                    html = `
+                        ${header}
+                        <div class="space-y-6 fade-in">
+                            <div class="bg-amber-50 p-4 border border-amber-200 rounded-xl flex gap-4 items-start">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xl mt-1"></i>
+                                <div>
+                                    <h4 class="font-bold text-amber-900 uppercase text-xs">Triage Protocol</h4>
+                                    <p class="text-sm text-amber-700">Reviewing impact. High priority requests are routed to Level 2 immediately.</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-bold text-slate-700">Classification</label>
+                                    <select id="tri-cat" class="mt-1 w-full p-3 border border-slate-200 rounded-xl">
+                                        <option value="">Select Category...</option>
+                                        <option>Repair (Hardware)</option>
+                                        <option>Support (Software)</option>
+                                        <option>Request (New Gear)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-slate-700">Service Priority</label>
+                                    <select id="tri-prio" class="mt-1 w-full p-3 border border-slate-200 rounded-xl">
+                                        <option value="">Set Priority...</option>
+                                        <option>P1 - Critical</option>
+                                        <option>P2 - High</option>
+                                        <option>P3 - Medium</option>
+                                        <option>P4 - Low</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button onclick="submitTriage()" class="w-full bg-amber-500 text-white py-4 rounded-xl font-black text-lg hover:bg-amber-600 transition-all">ASSIGN RESOURCES</button>
+                        </div>
+                    `;
+                    break;
+                case 3:
+                    html = `
+                        ${header}
+                        <div class="space-y-6 fade-in">
+                            <div class="bg-blue-50 p-5 rounded-xl border border-blue-100 flex items-center gap-4">
+                                <i class="fa-solid fa-bolt text-blue-500 text-2xl"></i>
+                                <p class="text-sm font-medium text-blue-800 italic">"Attempt remote intervention before physical escalation."</p>
+                            </div>
+                            <div class="grid grid-cols-1 gap-3">
+                                <button onclick="addLog('Ran OS Diagnostic Script')" class="p-4 border rounded-xl hover:bg-slate-50 flex items-center justify-between group">
+                                    <span><i class="fa-solid fa-terminal mr-3 text-slate-400 group-hover:text-blue-500"></i> Run Diagnostic Script</span>
+                                    <i class="fa-solid fa-chevron-right text-xs opacity-0 group-hover:opacity-100 transition-all"></i>
+                                </button>
+                                <button onclick="addLog('System Re-authenticated')" class="p-4 border rounded-xl hover:bg-slate-50 flex items-center justify-between group">
+                                    <span><i class="fa-solid fa-key mr-3 text-slate-400 group-hover:text-blue-500"></i> Refresh User Credentials</span>
+                                    <i class="fa-solid fa-chevron-right text-xs opacity-0 group-hover:opacity-100 transition-all"></i>
+                                </button>
+                            </div>
+                            <div class="flex flex-col md:flex-row gap-4 mt-6">
+                                <button onclick="resolveL1()" class="flex-1 bg-blue-600 text-white py-4 rounded-xl font-black hover:bg-blue-700">FIXED REMOTELY</button>
+                                <button onclick="escalateL2()" class="flex-1 bg-slate-100 text-slate-700 py-4 rounded-xl font-black hover:bg-slate-200">ESCALATE TO L2</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 4:
+                    html = `
+                        ${header}
+                        <div class="space-y-6 fade-in">
+                             <div class="bg-red-50 p-4 border border-red-200 rounded-xl flex gap-4 items-center">
+                                <i class="fa-solid fa-screwdriver-wrench text-red-500"></i>
+                                <p class="text-xs font-bold text-red-800 uppercase tracking-widest">Technician Workbench</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-2">Technician Resolution Notes</label>
+                                <textarea id="res-notes" class="w-full p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none h-32" placeholder="Detail hardware parts replaced or software patches applied..."></textarea>
+                            </div>
+                            <button onclick="submitResolution()" class="w-full bg-red-600 text-white py-4 rounded-xl font-black text-lg hover:bg-red-700 transition-all shadow-lg shadow-red-100">DEPLOY FIX</button>
+                        </div>
+                    `;
+                    break;
+                case 5:
+                    html = `
+                        ${header}
+                        <div class="text-center space-y-8 py-10 fade-in">
+                            <div class="relative inline-block">
+                                <div class="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mx-auto">
+                                    <i class="fa-solid fa-user-check text-purple-600 text-4xl"></i>
+                                </div>
+                                <div class="absolute -top-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full border-2 border-white"></div>
+                            </div>
+                            <div class="max-w-xs mx-auto">
+                                <h3 class="text-2xl font-black text-slate-900">Validating Fix</h3>
+                                <p class="text-slate-500 mt-2">Checking with user if the issue is completely resolved in their production environment.</p>
+                            </div>
+                            <div class="flex gap-4 max-w-sm mx-auto">
+                                <button onclick="validateSuccess()" class="flex-1 bg-purple-600 text-white py-4 rounded-xl font-black hover:bg-purple-700 shadow-lg shadow-purple-100">CONFIRMED</button>
+                                <button onclick="validateFail()" class="flex-1 bg-slate-200 text-slate-700 py-4 rounded-xl font-black hover:bg-slate-300">STILL BROKEN</button>
+                            </div>
+                        </div>
+                    `;
+                    break;
+                case 6:
+                    html = `
+                        ${header}
+                        <div class="space-y-6 fade-in">
+                            <div class="bg-slate-100 p-6 rounded-2xl border border-slate-200">
+                                <h3 class="font-black text-slate-800 uppercase text-xs tracking-widest mb-4">Post-Incident Checklist</h3>
+                                <div class="space-y-4">
+                                    <label class="flex items-center gap-4 p-4 bg-white rounded-xl cursor-pointer border border-transparent hover:border-slate-300">
+                                        <input type="checkbox" id="kb-check" class="w-6 h-6 rounded accent-slate-800">
+                                        <div>
+                                            <p class="font-bold text-sm">Add to Knowledge Base?</p>
+                                            <p class="text-xs text-slate-500">Enable this if the fix is unique or repeatable.</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-4 p-4 bg-white rounded-xl cursor-pointer border border-transparent hover:border-slate-300">
+                                        <input type="checkbox" checked class="w-6 h-6 rounded accent-slate-800">
+                                        <div>
+                                            <p class="font-bold text-sm">Update Asset Ledger</p>
+                                            <p class="text-xs text-slate-500">Reflect new components or replacement device.</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <button onclick="closeTicket()" class="w-full bg-slate-900 text-white py-4 rounded-xl font-black text-lg hover:bg-black transition-all">ARCHIVE & CLOSE TICKET</button>
+                        </div>
+                    `;
+                    break;
+            }
+
+            container.innerHTML = html;
+            updateStepper();
+            updateSummary();
+        }
+
+        function updateSummary() {
+            document.getElementById('sum-asset').innerText = ticketData.assetId || '—';
+            document.getElementById('sum-urgency').innerText = ticketData.urgency || '—';
+            document.getElementById('sum-urgency').className = `font-bold ${ticketData.urgency === 'Critical' ? 'text-red-500' : 'text-slate-900'}`;
+            document.getElementById('sum-category').innerText = ticketData.category || '—';
+            document.getElementById('sum-priority').innerText = ticketData.priority || '—';
+        }
+
+        // Action Handlers
+        function submitIntake() {
+            const desc = document.getElementById('in-desc').value;
+            const asset = document.getElementById('in-asset').value;
+            const urgency = document.getElementById('in-urgency').value;
+
+            if(!desc || !asset) {
+                alert("Please fill in the description and asset ID.");
+                return;
+            }
+
+            ticketData.description = desc;
+            ticketData.assetId = asset;
+            ticketData.urgency = urgency;
+            
+            addLog(`Ticket generated for Asset: ${asset}`);
+            currentStage = 2;
+            renderStage();
+        }
+
+        function submitTriage() {
+            const cat = document.getElementById('tri-cat').value;
+            const prio = document.getElementById('tri-prio').value;
+
+            if(!cat || !prio) {
+                alert("Please select category and priority.");
+                return;
+            }
+
+            ticketData.category = cat;
+            ticketData.priority = prio;
+
+            addLog(`Triage complete: ${cat} / ${prio}`);
+            currentStage = 3;
+            renderStage();
+        }
+
+        function resolveL1() {
+            ticketData.resolution = "Resolved via Level 1 remote tools.";
+            addLog("Self-healed at L1. Jumping to Validation.");
+            currentStage = 5;
+            renderStage();
+        }
+
+        function escalateL2() {
+            addLog("Escalated to L2 Technician.");
+            currentStage = 4;
+            renderStage();
+        }
+
+        function submitResolution() {
+            const notes = document.getElementById('res-notes').value;
+            if(!notes) {
+                alert("Please provide resolution notes.");
+                return;
+            }
+            ticketData.resolution = notes;
+            addLog(`Resolution Deployed: ${notes.substring(0, 30)}...`);
+            currentStage = 5;
+            renderStage();
+        }
+
+        function validateSuccess() {
+            addLog("User validated the fix.");
+            currentStage = 6;
+            renderStage();
+        }
+
+        function validateFail() {
+            addLog("Fix failed in production. Reverting to L2.");
+            currentStage = 4;
+            renderStage();
+        }
+
+        function closeTicket() {
+            const isKb = document.getElementById('kb-check').checked;
+            addLog(`Workflow Finished. KB Article: ${isKb ? 'CREATED' : 'SKIPPED'}`);
+            
+            setTimeout(() => {
+                alert(`SUCCESS: Ticket ${ticketData.id} has been archived. System ready for new input.`);
+                // Reset everything
+                ticketData = {
+                    id: `TIC-${Math.floor(1000 + Math.random() * 9000)}`,
+                    description: '',
+                    urgency: 'Medium',
+                    assetId: '',
+                    category: '',
+                    priority: '',
+                    logs: [],
+                    resolution: ''
+                };
+                currentStage = 1;
+                document.getElementById('audit-trail').innerHTML = '<p class="text-slate-500 italic text-sm">Waiting for initial submission...</p>';
+                renderStage();
+            }, 500);
+        }
+
+        // Initial Load
+        window.onload = () => {
+            renderStage();
+        };
+    </script>
+</body>
+</html>
